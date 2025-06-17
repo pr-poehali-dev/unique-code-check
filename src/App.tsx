@@ -7,7 +7,7 @@ import Index from "./pages/Index";
 import CheckCode from "./pages/CheckCode";
 import Instructions from "./pages/Instructions";
 import Admin from "./pages/Admin";
-import AdminOrders from "./pages/AdminOrders";
+import Admin from "./pages/Admin";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
