@@ -11,6 +11,9 @@ import {
 } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import Icon from "@/components/ui/icon";
+import { database } from "@/services/database";
+import { digisellerApi } from "@/services/digisellerApi";
+import { OrderStatus } from "@/types/order";
 
 const CheckCode = () => {
   const [code, setCode] = useState("");
@@ -27,21 +30,55 @@ const CheckCode = () => {
     setResult(null);
 
     try {
-      // Имитация API запроса (замените на реальный API)
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      // Проверяем на дубли
+      const isDuplicate = await database.isDuplicateCode(code.trim());
+      if (isDuplicate) {
+        setError("Этот код уже был обработан ранее");
+        return;
+      }
 
-      // Пример результата
-      const mockResult = {
-        valid: Math.random() > 0.3,
-        product: "Цифровой продукт",
-        seller: "Продавец123",
-        purchaseDate: new Date().toLocaleDateString("ru-RU"),
-        status: Math.random() > 0.3 ? "active" : "used",
-      };
+      // Создаем заказ в базе данных
+      const order = await database.createOrder({
+        uniqueCode: code.trim(),
+      });
 
-      setResult(mockResult);
+      // Проверяем код через Digiseller API
+      const apiResult = await digisellerApi.verifyUniqueCode(code.trim());
+
+      if (apiResult.success && apiResult.data) {
+        // Обновляем заказ с результатами проверки
+        await database.updateOrderStatus(order.id, OrderStatus.COMPLETED);
+
+        // Отмечаем код как обработанный в Digiseller
+        await digisellerApi.markCodeAsProcessed(code.trim());
+
+        setResult({
+          valid: true,
+          product: "Цифровой продукт",
+          seller: "Продавец",
+          purchaseDate: apiResult.data.purchaseDate,
+          status: "active",
+        });
+      } else {
+        // Обновляем статус заказа как ошибка
+        await database.updateOrderStatus(
+          order.id,
+          OrderStatus.ERROR,
+          apiResult.error || "Неизвестная ошибка",
+        );
+
+        setResult({
+          valid: false,
+          product: "Неизвестно",
+          seller: "Неизвестно",
+          purchaseDate: "Неизвестно",
+          status: "invalid",
+        });
+      }
     } catch (err) {
-      setError("Ошибка при проверке кода. Попробуйте позже.");
+      const errorMessage =
+        err instanceof Error ? err.message : "Ошибка при проверке кода";
+      setError(errorMessage);
     } finally {
       setIsLoading(false);
     }
